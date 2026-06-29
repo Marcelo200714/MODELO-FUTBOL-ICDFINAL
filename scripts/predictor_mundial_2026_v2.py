@@ -288,8 +288,45 @@ PARAM_DIST = {
     'max_features': ['sqrt', 'log2', 0.5],
 }
 
-def buscar_mejor_modelo(X_tr, y_tr, nombre):
-    base = RandomForestRegressor(random_state=42, n_jobs=1)
+# --------------------------------------------------------------------------
+# Restricciones de monotonía
+# --------------------------------------------------------------------------
+# Un Random Forest es un promedio de hojas entrenadas con datos históricos:
+# en emparejamientos con una brecha de nivel poco frecuente en el dataset
+# (ej. una selección de nivel medio-bajo contra una potencia europea), el
+# ruido de features secundarias puede "invertir" la relación esperada con
+# las features más importantes (elo_diff, rank_diff), prediciendo más goles
+# para el equipo objetivamente más débil. Para evitarlo, se le impone al
+# modelo una restricción matemática: más ELO/ranking/forma a favor de un
+# equipo nunca puede traducirse en una predicción de MENOS goles esperados
+# para ese equipo. La dirección (+1 / -1 / 0) es la misma para cualquier par
+# de equipos —no depende de quiénes sean—, por lo que no es una corrección
+# manual por selección, sino una restricción general sobre el significado
+# de cada feature.
+# 1 = monótono creciente, -1 = monótono decreciente, 0 = sin restricción.
+MONOTONIC_HOME = {
+    'elo_diff': 1, 'overall_rating_diff': 1, 'pace_diff': 0,
+    'home_gf_last5': 1, 'home_gc_last5': 0, 'away_gf_last5': 0, 'away_gc_last5': 1,
+    'home_last5_winrate': 1, 'away_last5_winrate': -1,
+    'h2h_last5_home_winrate': 1, 'h2h_last5_avg_gd': 1,
+    'rank_diff': -1, 'tier_diff': -1, 'rank_diff_log': -1,
+    'net_last5_diff': 1, 'neutral_num': 0,
+}
+# Para el modelo de goles del visitante, las features "propias" y "del
+# rival" se invierten (ej. home_gf_last5 pasa a ser la forma del rival), por
+# lo que el signo de cada restricción es el opuesto.
+MONOTONIC_AWAY = {
+    'elo_diff': -1, 'overall_rating_diff': -1, 'pace_diff': 0,
+    'home_gf_last5': 0, 'home_gc_last5': 1, 'away_gf_last5': 1, 'away_gc_last5': 0,
+    'home_last5_winrate': -1, 'away_last5_winrate': 1,
+    'h2h_last5_home_winrate': -1, 'h2h_last5_avg_gd': -1,
+    'rank_diff': 1, 'tier_diff': 1, 'rank_diff_log': 1,
+    'net_last5_diff': -1, 'neutral_num': 0,
+}
+
+def buscar_mejor_modelo(X_tr, y_tr, nombre, monotonic_map):
+    monotonic_cst = [monotonic_map[f] for f in FEATURES]
+    base = RandomForestRegressor(random_state=42, n_jobs=1, monotonic_cst=monotonic_cst)
     search = RandomizedSearchCV(
         base, PARAM_DIST, n_iter=15, cv=3,
         scoring='neg_mean_absolute_error',
@@ -300,8 +337,8 @@ def buscar_mejor_modelo(X_tr, y_tr, nombre):
     print(f'MAE promedio en CV ({nombre}): {-search.best_score_:.3f} goles')
     return search.best_estimator_
 
-model_home = buscar_mejor_modelo(X_train, yh_train, 'goles local')
-model_away = buscar_mejor_modelo(X_train, ya_train, 'goles visitante')
+model_home = buscar_mejor_modelo(X_train, yh_train, 'goles local', MONOTONIC_HOME)
+model_away = buscar_mejor_modelo(X_train, ya_train, 'goles visitante', MONOTONIC_AWAY)
 
 pred_h = model_home.predict(X_test)
 pred_a = model_away.predict(X_test)
