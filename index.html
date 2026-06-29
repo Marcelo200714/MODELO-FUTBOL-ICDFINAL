@@ -182,16 +182,19 @@
 <script>
 const API = 'http://127.0.0.1:5000';
 
-// 32 equipos en dieciséisavos = 16 partidos
+// 32 equipos en dieciséisavos = 16 partidos.
+// Cruces reales del Mundial 2026 según los clasificados de la fase de
+// grupos (no un bracket de ejemplo): cada partido se predice con el
+// modelo vía el endpoint /predecir al pulsar "Predecir".
 const PARTIDOS_16 = [
-  ['Alemania','Paraguay'],   ['Brasil','Japón'],
-  ['Francia','Suecia'],      ['Irlanda','Noruega'],
-  ['Sudáfrica','Canadá'],    ['México','Colombia'],
-  ['Países Bajos','Marruecos'],['Argentina','Australia'],
-  ['Uruguay','Perú'],        ['Chile','Bolivia'],
-  ['Ecuador','Venezuela'],   ['Colombia','Panamá'],
-  ['Costa Rica','Honduras'], ['Jamaica','Belice'],
-  ['Guatemala','El Salvador'],['Nicaragua','Haití']
+  ['Canadá','Sudáfrica'],       ['Paraguay','Alemania'],
+  ['Marruecos','Países Bajos'], ['Brasil','Japón'],
+  ['Francia','Suecia'],         ['Noruega','Costa de Marfil'],
+  ['México','Ecuador'],         ['Inglaterra','RD Congo'],
+  ['Estados Unidos','Bosnia'],  ['Bélgica','Senegal'],
+  ['Portugal','Croacia'],       ['España','Austria'],
+  ['Suiza','Argelia'],          ['Argentina','Cabo Verde'],
+  ['Colombia','Ghana'],         ['Egipto','Australia']
 ];
 
 const BTN_HANDLERS = {};
@@ -218,6 +221,7 @@ const FLAGS = {
   'Suiza':'🇨🇭','Turquía':'🇹🇷','Ucrania':'🇺🇦','Uruguay':'🇺🇾',
   'Venezuela':'🇻🇪','Arabia Saudita':'🇸🇦','Bosnia':'🇧🇦',
   'Escocia':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Gales':'🏴󠁧󠁢󠁷󠁬󠁳󠁿',
+  'RD Congo':'🇨🇩','Costa de Marfil':'🇨🇮','Cabo Verde':'🇨🇻','Argelia':'🇩🇿',
 };
 function flag(pais){ return FLAGS[pais] || '🏳️'; }
 
