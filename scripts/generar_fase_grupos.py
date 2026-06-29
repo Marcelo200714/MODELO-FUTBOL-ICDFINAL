@@ -80,36 +80,17 @@ ES_TO_EN = {
 def traducir(nombre_es):
     return ES_TO_EN.get(nombre_es, nombre_es)
 
-# Ranking FIFA (mismo diccionario que en entrenamiento)
-FIFA_RANKING = {
-    'Argentina': 1, 'France': 2, 'Brazil': 3, 'England': 4, 'Belgium': 5,
-    'Croatia': 6, 'Netherlands': 7, 'Portugal': 8, 'Italy': 9, 'Spain': 10,
-    'USA': 11, 'Mexico': 12, 'Germany': 13, 'Uruguay': 14, 'Switzerland': 15,
-    'Colombia': 16, 'Senegal': 17, 'Denmark': 18, 'Japan': 19, 'Iran': 20,
-    'South Korea': 21, 'Australia': 22, 'Ukraine': 23, 'Austria': 24, 'Sweden': 25,
-    'Nigeria': 26, 'Ecuador': 27, 'Wales': 28, 'Peru': 29, 'Poland': 30,
-    'Morocco': 31, 'Egypt': 32, 'Chile': 33, 'Tunisia': 34, 'Turkey': 35,
-    'Costa Rica': 36, 'Russia': 37, 'Algeria': 38, 'Scotland': 39, 'Norway': 40,
-    'Romania': 41, 'Czech Republic': 42, 'Ghana': 43, 'Qatar': 44, 'Saudi Arabia': 45,
-    'Panama': 46, 'Honduras': 47, 'Jamaica': 48, 'Paraguay': 49, 'Ivory Coast': 50,
-    'Cameroon': 51, 'South Africa': 52, 'Bolivia': 53, 'Venezuela': 54, 'Canada': 55,
-    'New Zealand': 56, 'Uzbekistan': 57, 'Cape Verde': 58, 'DR Congo': 59, 'Haiti': 60,
-    'Bosnia and Herzegovina': 61, 'Slovakia': 62, 'Slovenia': 63, 'Hungary': 64,
-    'Greece': 65, 'Ireland': 66, 'Finland': 67, 'Iceland': 68, 'Albania': 69,
-    'Montenegro': 70, 'North Macedonia': 71, 'Georgia': 72, 'Armenia': 73,
-    'Kosovo': 74, 'Azerbaijan': 75, 'Jordan': 76, 'Iraq': 77, 'Oman': 78,
-    'Bahrain': 79, 'Kuwait': 80, 'UAE': 81, 'Syria': 82, 'Palestine': 83,
-    'India': 84, 'China': 85, 'Indonesia': 86, 'Thailand': 87, 'Vietnam': 88,
-    'Philippines': 89, 'Cuba': 90, 'Curacao': 91, 'Trinidad and Tobago': 92,
-    'El Salvador': 93, 'Guatemala': 94, 'Benin': 95, 'Burkina Faso': 96,
-    'Mali': 97, 'Zambia': 98, 'Angola': 99, 'Uganda': 100, 'Ethiopia': 101,
-    'Tanzania': 102, 'Zimbabwe': 103, 'Mozambique': 104, 'Libya': 105, 'Gabon': 106,
-    'Guinea': 107, 'Guyana': 108, 'Barbados': 109, 'Mauritania': 110
-}
-def get_rank(team):
-    return FIFA_RANKING.get(team, 100)
+# NOTA: aquí existía un diccionario FIFA_RANKING escrito a mano (un único
+# snapshot desactualizado), usado tanto como feature de entrenamiento como
+# para una corrección exponencial manual sobre la predicción. Ese diccionario
+# estaba desincronizado con el ranking real del propio dataset (ej. tenía a
+# Croacia en el puesto 6 y a Ghana en el 43, cuando el histórico real los
+# ubica en el 11 y el 76 respectivamente), lo que producía tablas de grupo
+# sin sentido (selecciones fuertes como Inglaterra terminando últimas). Se
+# eliminó por completo: el ranking ahora se lee siempre del histórico real
+# (ver get_features_partido) y ya no se aplica ninguna corrección manual.
 
-# Función que construye el vector de 17 features (idéntica a la del entrenamiento)
+# Función que construye el vector de 16 features (idéntica a la del entrenamiento)
 def get_features_partido(home_es, away_es, df_final, forma, neutral_val=1):
     home_en = traducir(home_es)
     away_en = traducir(away_es)
@@ -142,19 +123,17 @@ def get_features_partido(home_es, away_es, df_final, forma, neutral_val=1):
     h2h_wr = h2h['h2h_last5_home_winrate'].mean() if len(h2h) else 0.5
     h2h_gd = h2h['h2h_last5_avg_gd'].mean()       if len(h2h) else 0.0
 
+    # Ranking real (último valor observado en el histórico para ese equipo),
+    # no un diccionario inventado.
     rank_h = rh['home_rank'].tail(1).values[0] if len(rh) else 50
     rank_a = ra['away_rank'].tail(1).values[0] if len(ra) else 50
     rank_diff_val = rank_h - rank_a
+    rank_diff_log_val = np.sign(rank_diff_val) * np.log1p(np.abs(rank_diff_val))
 
     tier_h = rh['home_rank_tier'].tail(1).values[0] if len(rh) else 2
     tier_a = ra['away_rank_tier'].tail(1).values[0] if len(ra) else 2
     tier_diff_val = tier_h - tier_a
 
-    # --- Nuevas features (como en entrenamiento) ---
-    fifa_rank_h = get_rank(home_en)
-    fifa_rank_a = get_rank(away_en)
-    fifa_rank_diff = fifa_rank_h - fifa_rank_a
-    fifa_rank_diff_log = np.sign(fifa_rank_diff) * np.log1p(np.abs(fifa_rank_diff))
     net_last5_diff = fh['net_last5'] - fa['net_last5']
 
     feats = [
@@ -163,39 +142,37 @@ def get_features_partido(home_es, away_es, df_final, forma, neutral_val=1):
         home_last5_wr, away_last5_wr,
         h2h_wr, h2h_gd,
         rank_diff_val, tier_diff_val,
-        fifa_rank_diff,
-        fifa_rank_diff_log,
+        rank_diff_log_val,
         net_last5_diff,
         neutral_val
     ]
     return np.array(feats).reshape(1, -1)
 
 # --------------------------------------------
-# 3. Función de predicción con corrección exponencial
+# 3. Función de predicción (inferencia simétrica, sin corrección manual)
 # --------------------------------------------
-def predict_match_corregido(home_es, away_es):
-    # Obtener los goles base del modelo (sin corrección)
-    X = get_features_partido(home_es, away_es, df_final, forma, neutral_val=1)
-    g1_base = model_home.predict(X)[0]
-    g2_base = model_away.predict(X)[0]
+def predict_match(home_es, away_es):
+    """Predice el marcador promediando dos inferencias simétricas
+    (intercambiando quién figura como local), sin ninguna corrección manual
+    posterior. El marcador final se muestrea de una distribución de Poisson
+    centrada en los goles esperados que predice el regresor (técnica estándar
+    para simular partidos a partir de un modelo de goles esperados): redondear
+    directamente el promedio produce demasiados empates artificiales cuando
+    dos equipos tienen valores esperados muy parecidos (ej. 1.31 vs 1.35
+    siempre redondeaba a un empate 1-1), aplanando diferencias reales de
+    nivel en la tabla de grupos."""
+    X_s1 = get_features_partido(home_es, away_es, df_final, forma, neutral_val=1)
+    g1_s1 = model_home.predict(X_s1)[0]
+    g2_s1 = model_away.predict(X_s1)[0]
 
-    # Ranking para corrección exponencial
-    rank1 = get_rank(traducir(home_es))
-    rank2 = get_rank(traducir(away_es))
-    rank_diff = (rank2 - rank1) / 50.0   # positivo si home_es es mejor
-    correction = np.exp(rank_diff * 0.8) # factor 0.8 (ajustable)
+    X_s2 = get_features_partido(away_es, home_es, df_final, forma, neutral_val=1)
+    g2_s2 = model_home.predict(X_s2)[0]
+    g1_s2 = model_away.predict(X_s2)[0]
 
-    g1 = max(0, int(round(g1_base * correction)))
-    g2 = max(0, int(round(g2_base / correction if correction > 0 else g2_base)))
+    lam1 = max(0.05, (g1_s1 + g1_s2) / 2.0)
+    lam2 = max(0.05, (g2_s1 + g2_s2) / 2.0)
 
-    # Si empate y gran diferencia, forzar un gol más al mejor
-    if abs(rank_diff) > 0.3 and g1 == g2:
-        if rank_diff > 0:
-            g1 += 1
-        else:
-            g2 += 1
-
-    return min(g1, 7), min(g2, 7)
+    return int(np.random.poisson(lam1)), int(np.random.poisson(lam2))
 
 # --------------------------------------------
 # 4. Simular fase de grupos
@@ -204,7 +181,7 @@ predicted_results = []
 for _, row in df_2026.iterrows():
     home = row['home_team']
     away = row['away_team']
-    gh, ga = predict_match_corregido(home, away)
+    gh, ga = predict_match(home, away)
     predicted_results.append({
         'home_team': home,
         'away_team': away,
@@ -297,7 +274,7 @@ show_group_predictions(group_tables)
 # --------------------------------------------
 # 7. Mostrar en consola
 # --------------------------------------------
-print("\n--- TABLAS DE GRUPOS PREDICHAS (CORREGIDO) ---")
+print("\n--- TABLAS DE GRUPOS PREDICHAS ---")
 for group, teams in sorted(group_tables.items()):
     print(f"\nGRUPO {group}")
     for pos, (team, stats) in enumerate(teams, start=1):

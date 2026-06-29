@@ -6,9 +6,9 @@ import numpy as np
 import warnings
 warnings.filterwarnings('ignore')
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pickle
 import random
 import os
@@ -128,39 +128,21 @@ print(f'df_final shape: {df_final.shape}')
 print(df_final[['home_team','away_team','home_overall_rating','home_pace']].head())
 
 # ============================================================================
-# CELDA 4 - Ranking FIFA y feature engineering (MEJORADO)
+# CELDA 4 - Feature engineering (CORREGIDO)
 # ============================================================================
-# --- RANKING FIFA ---
-FIFA_RANKING = {
-    'Argentina': 1, 'France': 2, 'Brazil': 3, 'England': 4, 'Belgium': 5,
-    'Croatia': 6, 'Netherlands': 7, 'Portugal': 8, 'Italy': 9, 'Spain': 10,
-    'USA': 11, 'Mexico': 12, 'Germany': 13, 'Uruguay': 14, 'Switzerland': 15,
-    'Colombia': 16, 'Senegal': 17, 'Denmark': 18, 'Japan': 19, 'Iran': 20,
-    'South Korea': 21, 'Australia': 22, 'Ukraine': 23, 'Austria': 24, 'Sweden': 25,
-    'Nigeria': 26, 'Ecuador': 27, 'Wales': 28, 'Peru': 29, 'Poland': 30,
-    'Morocco': 31, 'Egypt': 32, 'Chile': 33, 'Tunisia': 34, 'Turkey': 35,
-    'Costa Rica': 36, 'Russia': 37, 'Algeria': 38, 'Scotland': 39, 'Norway': 40,
-    'Romania': 41, 'Czech Republic': 42, 'Ghana': 43, 'Qatar': 44, 'Saudi Arabia': 45,
-    'Panama': 46, 'Honduras': 47, 'Jamaica': 48, 'Paraguay': 49, 'Ivory Coast': 50,
-    'Cameroon': 51, 'South Africa': 52, 'Bolivia': 53, 'Venezuela': 54, 'Canada': 55,
-    'New Zealand': 56, 'Uzbekistan': 57, 'Cape Verde': 58, 'DR Congo': 59, 'Haiti': 60,
-    'Bosnia and Herzegovina': 61, 'Slovakia': 62, 'Slovenia': 63, 'Hungary': 64,
-    'Greece': 65, 'Ireland': 66, 'Finland': 67, 'Iceland': 68, 'Albania': 69,
-    'Montenegro': 70, 'North Macedonia': 71, 'Georgia': 72, 'Armenia': 73,
-    'Kosovo': 74, 'Azerbaijan': 75, 'Jordan': 76, 'Iraq': 77, 'Oman': 78,
-    'Bahrain': 79, 'Kuwait': 80, 'UAE': 81, 'Syria': 82, 'Palestine': 83,
-    'India': 84, 'China': 85, 'Indonesia': 86, 'Thailand': 87, 'Vietnam': 88,
-    'Philippines': 89, 'Cuba': 90, 'Curacao': 91, 'Trinidad and Tobago': 92,
-    'El Salvador': 93, 'Guatemala': 94, 'Benin': 95, 'Burkina Faso': 96,
-    'Mali': 97, 'Zambia': 98, 'Angola': 99, 'Uganda': 100, 'Ethiopia': 101,
-    'Tanzania': 102, 'Zimbabwe': 103, 'Mozambique': 104, 'Libya': 105, 'Gabon': 106,
-    'Guinea': 107, 'Guyana': 108, 'Barbados': 109, 'Mauritania': 110
-}
-
-def get_rank(team):
-    return FIFA_RANKING.get(team, 100)
-
-# --- Feature Engineering ---
+# El dataset YA trae 'home_rank' / 'away_rank' / 'rank_diff' / 'tier_diff' reales
+# y variables en el tiempo (ranking FIFA real de cada equipo en la fecha de cada
+# partido). La versión anterior de este script además usaba un diccionario
+# FIFA_RANKING escrito a mano con un único snapshot de ranking, desactualizado
+# e inconsistente con los datos reales (ej. Croacia figuraba en el puesto 6
+# cuando el propio dataset la ubica en el puesto 11; Ghana figuraba en el 43
+# cuando en realidad está en el 76). Esa feature inventada ('fifa_rank_diff')
+# se entrenaba en paralelo con la real ('rank_diff'), dándole al modelo dos
+# señales contradictorias del mismo concepto y degradando sus predicciones
+# para selecciones fuertes cuyo ranking real no coincidía con el inventado.
+#
+# Se elimina el diccionario y se deriva la transformación logarítmica
+# directamente de la columna real 'rank_diff'.
 df_final['overall_rating_diff'] = (
     df_final['home_overall_rating'].fillna(70) - df_final['away_overall_rating'].fillna(70)
 )
@@ -168,16 +150,25 @@ df_final['pace_diff'] = (
     df_final['home_pace'].fillna(70) - df_final['away_pace'].fillna(70)
 )
 
-# Diferencia de ranking FIFA (lineal)
-df_final['home_fifa_rank'] = df_final['home_team'].map(get_rank)
-df_final['away_fifa_rank'] = df_final['away_team'].map(get_rank)
-df_final['fifa_rank_diff'] = df_final['home_fifa_rank'] - df_final['away_fifa_rank']
-
-# --- NUEVA: transformación logarítmica de la diferencia de ranking ---
-# Captura mejor la no linealidad: equipos muy superiores tienen ventaja extra
-df_final['fifa_rank_diff_log'] = np.sign(df_final['fifa_rank_diff']) * np.log1p(np.abs(df_final['fifa_rank_diff']))
+# Transformación logarítmica del ranking real (capta mejor la no linealidad:
+# equipos muy superiores tienen ventaja extra) sin depender de datos inventados.
+df_final['rank_diff_log'] = np.sign(df_final['rank_diff']) * np.log1p(np.abs(df_final['rank_diff']))
 
 # Forma reciente (últimos 5 partidos)
+#
+# BUG DE FONDO: promediar goles crudos de los últimos 5 partidos no ajusta
+# por la fuerza del rival. Selecciones que golean a rivales débiles de su
+# propia confederación (ej. una goleada 8-0 en clasificatorias de Oceanía u
+# CONCACAF) terminan con una "forma reciente" inflada muy por encima de
+# selecciones top que juegan calendarios mucho más parejos (Europa/Sudamérica),
+# aunque su nivel real sea muy inferior. Esa señal ruidosa competía en el
+# modelo con el ranking real y podía revertir el resultado esperado en
+# cruces claros (ej. una potencia vs. una selección menor). Se acota cada
+# partido individual a un máximo de 4 goles a favor/en contra antes de
+# promediar, para que una goleada puntual no pese desproporcionadamente más
+# que una victoria ajustada ante un rival de nivel similar.
+GOLEADA_MAX = 4
+
 def calcular_forma(df_results, ventana=5):
     df_r = df_results.sort_values('date').copy()
     forma_dict = {}
@@ -187,7 +178,9 @@ def calcular_forma(df_results, ventana=5):
             columns={'home_score':'gf','away_score':'gc'})
         como_visitante = df_r[df_r['away_team'] == equipo][['date','away_score','home_score']].rename(
             columns={'away_score':'gf','home_score':'gc'})
-        partidos = pd.concat([como_local, como_visitante]).sort_values('date').tail(ventana)
+        partidos = pd.concat([como_local, como_visitante]).sort_values('date').tail(ventana).copy()
+        partidos['gf'] = partidos['gf'].clip(upper=GOLEADA_MAX)
+        partidos['gc'] = partidos['gc'].clip(upper=GOLEADA_MAX)
         if len(partidos) > 0:
             forma_dict[equipo] = {
                 'gf_last5': partidos['gf'].mean(),
@@ -206,7 +199,6 @@ df_final['home_gc_last5'] = df_final['home_team'].map(lambda t: forma.get(t, {})
 df_final['away_gf_last5'] = df_final['away_team'].map(lambda t: forma.get(t, {}).get('gf_last5', 1.0))
 df_final['away_gc_last5'] = df_final['away_team'].map(lambda t: forma.get(t, {}).get('gc_last5', 1.0))
 
-# --- NUEVA: diferencia de neto en últimos 5 partidos ---
 df_final['home_net_last5'] = df_final['home_team'].map(lambda t: forma.get(t, {}).get('net_last5', 0.0))
 df_final['away_net_last5'] = df_final['away_team'].map(lambda t: forma.get(t, {}).get('net_last5', 0.0))
 df_final['net_last5_diff'] = df_final['home_net_last5'] - df_final['away_net_last5']
@@ -217,9 +209,8 @@ FEATURES_BASE = [
     'home_last5_winrate', 'away_last5_winrate',
     'h2h_last5_home_winrate', 'h2h_last5_avg_gd',
     'rank_diff', 'tier_diff',
-    'fifa_rank_diff',         # lineal
-    'fifa_rank_diff_log',     # logarítmica (NUEVA)
-    'net_last5_diff'          # diferencia de neto (NUEVA)
+    'rank_diff_log',    # log del ranking REAL (antes usaba un ranking inventado)
+    'net_last5_diff'
 ]
 df_final[FEATURES_BASE] = df_final[FEATURES_BASE].fillna(0)
 
@@ -237,28 +228,43 @@ print('Distribución neutral_num:')
 print(df_final['neutral_num'].value_counts())
 
 # ============================================================================
-# CELDA 6 - Entrenamiento (MEJORADO)
+# CELDA 6 - Entrenamiento (RandomForestRegressor + búsqueda de hiperparámetros)
 # ============================================================================
+# Antes se entrenaba un RandomForestClassifier prediciendo la clase de goles
+# más probable (con clip(upper=5)). Un clasificador que solo devuelve la moda
+# de la distribución "aplana" la diferencia entre equipos: dos selecciones muy
+# distintas en nivel terminan prediciendo el mismo marcador porque la clase
+# más probable para ambas es igual (0 o 1 gol), y esa pérdida de información
+# es la que después se intentaba "arreglar" a mano con una corrección
+# exponencial basada en el ranking inventado.
+#
+# Ahora se usa RandomForestRegressor: predice directamente el número esperado
+# de goles (continuo), por lo que cualquier diferencia de nivel entre equipos
+# se refleja de forma suave y directa en la salida del propio modelo, sin
+# necesitar ninguna corrección manual posterior.
 FEATURES = [
     'elo_diff', 'overall_rating_diff', 'pace_diff',
     'home_gf_last5', 'home_gc_last5', 'away_gf_last5', 'away_gc_last5',
     'home_last5_winrate', 'away_last5_winrate',
     'h2h_last5_home_winrate', 'h2h_last5_avg_gd',
     'rank_diff', 'tier_diff',
-    'fifa_rank_diff',        # lineal
-    'fifa_rank_diff_log',    # logarítmica
-    'net_last5_diff',        # diferencia de neto
+    'rank_diff_log',
+    'net_last5_diff',
     'neutral_num'
 ]
 
 df_train = df_final.dropna(subset=['home_score', 'away_score'] + FEATURES).copy()
 
-df_train['home_score_cls'] = df_train['home_score'].clip(upper=5).astype(int)
-df_train['away_score_cls'] = df_train['away_score'].clip(upper=5).astype(int)
+# Solo se acota goleadas extremas (blowouts de 15-31 goles en clasificatorias
+# contra selecciones amateur) para que no dominen la varianza de los árboles;
+# a diferencia del clip(upper=5) anterior, esto conserva diferenciación real
+# entre un resultado de 3, 5 u 8 goles.
+df_train['home_score_reg'] = df_train['home_score'].clip(upper=8)
+df_train['away_score_reg'] = df_train['away_score'].clip(upper=8)
 
 X      = df_train[FEATURES].values
-y_home = df_train['home_score_cls'].values
-y_away = df_train['away_score_cls'].values
+y_home = df_train['home_score_reg'].values
+y_away = df_train['away_score_reg'].values
 
 X_train, X_test, yh_train, yh_test, ya_train, ya_test = train_test_split(
     X, y_home, y_away, test_size=0.2, random_state=42
@@ -266,41 +272,54 @@ X_train, X_test, yh_train, yh_test, ya_train, ya_test = train_test_split(
 
 print(f'Train: {X_train.shape[0]} partidos | Test: {X_test.shape[0]} partidos')
 print(f'Features ({len(FEATURES)}): {FEATURES}')
-print(f'Distribución goles local  : {pd.Series(y_home).value_counts().sort_index().to_dict()}')
-print(f'Distribución goles visita : {pd.Series(y_away).value_counts().sort_index().to_dict()}')
 
-# Ajuste de hiperparámetros para mejorar
-RF_PARAMS = {
-    'n_estimators': 300,
-    'max_depth': 15,
-    'min_samples_split': 15,
-    'min_samples_leaf': 8,
-    'random_state': 42,
-    'n_jobs': -1
+# Búsqueda de hiperparámetros por validación cruzada (en vez de valores fijos
+# elegidos a mano): se deja que el propio proceso de selección de modelo
+# encuentre la combinación que minimiza el error, con 3 folds de CV.
+# max_depth y min_samples_leaf se acotan a un rango razonable (nada de
+# profundidad ilimitada) para no generar árboles innecesariamente grandes:
+# un bosque más profundo de lo necesario no mejora la generalización y solo
+# infla el tamaño del .pkl exportado.
+PARAM_DIST = {
+    'n_estimators': [150, 200, 300, 400],
+    'max_depth': [8, 10, 12, 15],
+    'min_samples_split': [5, 10, 15, 20],
+    'min_samples_leaf': [4, 8, 12, 16],
+    'max_features': ['sqrt', 'log2', 0.5],
 }
 
-model_home = RandomForestClassifier(**RF_PARAMS)
-model_away = RandomForestClassifier(**RF_PARAMS)
+def buscar_mejor_modelo(X_tr, y_tr, nombre):
+    base = RandomForestRegressor(random_state=42, n_jobs=1)
+    search = RandomizedSearchCV(
+        base, PARAM_DIST, n_iter=15, cv=3,
+        scoring='neg_mean_absolute_error',
+        random_state=42, n_jobs=-1, verbose=0
+    )
+    search.fit(X_tr, y_tr)
+    print(f'\nMejores hiperparámetros ({nombre}): {search.best_params_}')
+    print(f'MAE promedio en CV ({nombre}): {-search.best_score_:.3f} goles')
+    return search.best_estimator_
 
-model_home.fit(X_train, yh_train)
-model_away.fit(X_train, ya_train)
+model_home = buscar_mejor_modelo(X_train, yh_train, 'goles local')
+model_away = buscar_mejor_modelo(X_train, ya_train, 'goles visitante')
 
-print('\n=== Clasificador Goles Local ===')
-print(f'Precisión en test: {accuracy_score(yh_test, model_home.predict(X_test)):.3f}')
-print('\n=== Clasificador Goles Visitante ===')
-print(f'Precisión en test: {accuracy_score(ya_test, model_away.predict(X_test)):.3f}')
+pred_h = model_home.predict(X_test)
+pred_a = model_away.predict(X_test)
+
+print('\n=== Regresor Goles Local ===')
+print(f'MAE en test : {mean_absolute_error(yh_test, pred_h):.3f} goles')
+print(f'RMSE en test: {mean_squared_error(yh_test, pred_h) ** 0.5:.3f} goles')
+print('\n=== Regresor Goles Visitante ===')
+print(f'MAE en test : {mean_absolute_error(ya_test, pred_a):.3f} goles')
+print(f'RMSE en test: {mean_squared_error(ya_test, pred_a) ** 0.5:.3f} goles')
+
+print('\nImportancia de features (goles local):')
+for feat, imp in sorted(zip(FEATURES, model_home.feature_importances_), key=lambda x: -x[1]):
+    print(f'  {feat:30s} {imp:.3f}')
 
 # ============================================================================
-# CELDA 7 - Funciones auxiliares para simulación (ACTUALIZADAS)
+# CELDA 7 - Funciones auxiliares para simulación
 # ============================================================================
-def alinear_proba(proba, clases, k_range):
-    vec = np.zeros(len(k_range))
-    for i, k in enumerate(k_range):
-        idx = np.where(clases == k)[0]
-        if len(idx):
-            vec[i] = proba[idx[0]]
-    return vec
-
 def get_features_partido(home_es, away_es, df_final, forma, neutral_val=1):
     home_en = traducir(home_es)
     away_en = traducir(away_es)
@@ -335,21 +354,17 @@ def get_features_partido(home_es, away_es, df_final, forma, neutral_val=1):
     h2h_wr = h2h['h2h_last5_home_winrate'].mean() if len(h2h) else 0.5
     h2h_gd = h2h['h2h_last5_avg_gd'].mean()       if len(h2h) else 0.0
 
+    # Ranking real (último valor observado para ese equipo en el dataset),
+    # NO un diccionario inventado.
     rank_h = rh['home_rank'].tail(1).values[0] if len(rh) else 50
     rank_a = ra['away_rank'].tail(1).values[0] if len(ra) else 50
     rank_diff_val = rank_h - rank_a
+    rank_diff_log_val = np.sign(rank_diff_val) * np.log1p(np.abs(rank_diff_val))
 
     tier_h = rh['home_rank_tier'].tail(1).values[0] if len(rh) else 2
     tier_a = ra['away_rank_tier'].tail(1).values[0] if len(ra) else 2
     tier_diff_val = tier_h - tier_a
 
-    # Ranking FIFA (lineal y log)
-    fifa_rank_h = get_rank(home_en)
-    fifa_rank_a = get_rank(away_en)
-    fifa_rank_diff = fifa_rank_h - fifa_rank_a
-    fifa_rank_diff_log = np.sign(fifa_rank_diff) * np.log1p(np.abs(fifa_rank_diff))
-
-    # Diferencia de neto en últimos 5
     net_last5_diff = fh['net_last5'] - fa['net_last5']
 
     feats = [
@@ -358,8 +373,7 @@ def get_features_partido(home_es, away_es, df_final, forma, neutral_val=1):
         home_last5_wr, away_last5_wr,
         h2h_wr, h2h_gd,
         rank_diff_val, tier_diff_val,
-        fifa_rank_diff,
-        fifa_rank_diff_log,
+        rank_diff_log_val,
         net_last5_diff,
         neutral_val
     ]
@@ -368,53 +382,29 @@ def get_features_partido(home_es, away_es, df_final, forma, neutral_val=1):
 print("Funciones auxiliares cargadas.")
 
 # ============================================================================
-# CELDA 8 - Simulador con corrección exponencial (MEJORADO)
+# CELDA 8 - Simulador con inferencia simétrica (sin corrección manual)
 # ============================================================================
 def simulador_partido_individual(equipo_1_es, equipo_2_es):
     """
-    Predice el resultado con inferencia simétrica + corrección exponencial
-    basada en ranking FIFA (factor 0.8).
+    Predice el resultado promediando dos inferencias simétricas (intercambiando
+    quién figura como local en el vector de features), tal como antes, pero
+    ya no aplica ninguna corrección manual posterior: el marcador sale
+    directamente de lo que el modelo entrenado predice.
     """
-    clases_h  = model_home.classes_
-    clases_a  = model_away.classes_
-    max_goles = max(clases_h.max(), clases_a.max())
-    k_range   = np.arange(0, max_goles + 1)
-
-    # Inferencia simétrica
     X_s1 = get_features_partido(equipo_1_es, equipo_2_es, df_final, forma, neutral_val=1)
-    p1_s1 = alinear_proba(model_home.predict_proba(X_s1)[0], clases_h, k_range)
-    p2_s1 = alinear_proba(model_away.predict_proba(X_s1)[0], clases_a, k_range)
+    g1_s1 = model_home.predict(X_s1)[0]
+    g2_s1 = model_away.predict(X_s1)[0]
 
     X_s2 = get_features_partido(equipo_2_es, equipo_1_es, df_final, forma, neutral_val=1)
-    p2_s2 = alinear_proba(model_home.predict_proba(X_s2)[0], clases_h, k_range)
-    p1_s2 = alinear_proba(model_away.predict_proba(X_s2)[0], clases_a, k_range)
+    g2_s2 = model_home.predict(X_s2)[0]
+    g1_s2 = model_away.predict(X_s2)[0]
 
-    p1_final = (p1_s1 + p1_s2) / 2.0
-    p2_final = (p2_s1 + p2_s2) / 2.0
+    lam1 = (g1_s1 + g1_s2) / 2.0
+    lam2 = (g2_s1 + g2_s2) / 2.0
 
-    g1_base = int(k_range[np.argmax(p1_final)])
-    g2_base = int(k_range[np.argmax(p2_final)])
+    g1 = max(0, int(round(lam1)))
+    g2 = max(0, int(round(lam2)))
 
-    # --- CORRECCIÓN EXPONENCIAL POST-PREDICCIÓN ---
-    rank1 = get_rank(traducir(equipo_1_es))
-    rank2 = get_rank(traducir(equipo_2_es))
-    rank_diff = (rank2 - rank1) / 50.0   # positivo si equipo_1 es mejor
-    correction = np.exp(rank_diff * 0.8) # factor 0.8 (ajusta según necesidad)
-
-    g1 = max(0, int(round(g1_base * correction)))
-    g2 = max(0, int(round(g2_base / correction if correction > 0 else g2_base)))
-
-    # Si empate y gran diferencia de ranking, forzar un gol más al mejor
-    if abs(rank_diff) > 0.3 and g1 == g2:
-        if rank_diff > 0:
-            g1 += 1
-        else:
-            g2 += 1
-
-    g1 = min(g1, 7)
-    g2 = min(g2, 7)
-
-    # Determinar ganador y penales
     if g1 > g2:
         ganador = equipo_1_es
         penales = False
@@ -424,8 +414,11 @@ def simulador_partido_individual(equipo_1_es, equipo_2_es):
         penales = False
         pen_g1 = pen_g2 = None
     else:
+        # Empate: se define el ganador de penales con la diferencia de goles
+        # esperados (lam1 - lam2) que el propio modelo ya predijo, no con un
+        # ranking externo.
         penales = True
-        prob_pen1 = 1 / (1 + np.exp(-rank_diff * 2.0))
+        prob_pen1 = 1 / (1 + np.exp(-(lam1 - lam2) * 2.0))
         if random.random() < prob_pen1:
             pen_g1, pen_g2 = 5, 4
             ganador = equipo_1_es
