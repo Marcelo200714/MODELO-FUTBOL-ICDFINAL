@@ -8,7 +8,7 @@ warnings.filterwarnings('ignore')
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, accuracy_score, confusion_matrix
 import pickle
 import random
 import os
@@ -346,13 +346,42 @@ pred_a = model_away.predict(X_test)
 print('\n=== Regresor Goles Local ===')
 print(f'MAE en test : {mean_absolute_error(yh_test, pred_h):.3f} goles')
 print(f'RMSE en test: {mean_squared_error(yh_test, pred_h) ** 0.5:.3f} goles')
+print(f'R2 en test  : {r2_score(yh_test, pred_h):.3f}')
 print('\n=== Regresor Goles Visitante ===')
 print(f'MAE en test : {mean_absolute_error(ya_test, pred_a):.3f} goles')
 print(f'RMSE en test: {mean_squared_error(ya_test, pred_a) ** 0.5:.3f} goles')
+print(f'R2 en test  : {r2_score(ya_test, pred_a):.3f}')
 
 print('\nImportancia de features (goles local):')
 for feat, imp in sorted(zip(FEATURES, model_home.feature_importances_), key=lambda x: -x[1]):
     print(f'  {feat:30s} {imp:.3f}')
+
+# ============================================================================
+# CELDA 6b - Accuracy de resultado (1X2)
+# ============================================================================
+# El regresor predice goles, no W/D/L, así que el "accuracy" no sale directo
+# de sklearn: se deriva comparando el signo de (goles predichos local - goles
+# predichos visitante) contra el signo real (yh_test - ya_test) en el set de
+# test, con el mismo criterio de empate que usa el simulador (round()).
+def resultado_1x2(gh, ga):
+    gh_r, ga_r = round(gh), round(ga)
+    if gh_r > ga_r:
+        return 'H'
+    if ga_r > gh_r:
+        return 'A'
+    return 'D'
+
+y_true_1x2 = [resultado_1x2(h, a) for h, a in zip(yh_test, ya_test)]
+y_pred_1x2 = [resultado_1x2(h, a) for h, a in zip(pred_h, pred_a)]
+
+acc_1x2 = accuracy_score(y_true_1x2, y_pred_1x2)
+labels_1x2 = ['H', 'D', 'A']
+cm_1x2 = confusion_matrix(y_true_1x2, y_pred_1x2, labels=labels_1x2)
+
+print('\n=== Accuracy de resultado (1X2, derivado del marcador redondeado) ===')
+print(f'Accuracy: {acc_1x2:.3f}')
+print(f'Matriz de confusión (filas=real, columnas=predicho) {labels_1x2}:')
+print(cm_1x2)
 
 # ============================================================================
 # CELDA 7 - Funciones auxiliares para simulación

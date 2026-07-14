@@ -18,6 +18,35 @@ Este repositorio contiene un sistema de predicción de resultados de la Copa Mun
     └── exportar_modelos.py            # Utilidad para exportar desde un notebook
 ```
 
+## 🏆 Resultados predichos: Dieciseisavos de final (Mundial 2026)
+
+Estos son los resultados que arroja el modelo para el cuadro real de dieciseisavos de final (32 clasificados reales de la fase de grupos), generados con `scripts/generar_dieciseisavos.py`. Se incluyen aquí directamente para poder revisarlos sin necesidad de clonar el repositorio ni ejecutar el código.
+
+| # | Local | Marcador | Visitante | Avanza a octavos |
+|---|-------|:--------:|-----------|:----------------:|
+| 1 | Canada | 2 - 1 | South Africa | **Canada** |
+| 2 | Paraguay | 1 - 2 | Germany | **Germany** |
+| 3 | Morocco | 1 - 2 | Netherlands | **Netherlands** |
+| 4 | Brazil | 2 - 1 | Japan | **Brazil** |
+| 5 | France | 2 - 1 | Sweden | **France** |
+| 6 | Norway | 2 - 1 | Côte d'Ivoire | **Norway** |
+| 7 | Mexico | 1 - 2 | Ecuador | **Ecuador** |
+| 8 | England | 2 - 1 | Congo DR | **England** |
+| 9 | USA | 2 - 1 | Bosnia and Herzegovina | **USA** |
+| 10 | Belgium | 1 - 2 | Senegal | **Senegal** |
+| 11 | Portugal | 2 - 1 | Croatia | **Portugal** |
+| 12 | Spain | 2 - 1 | Austria | **Spain** |
+| 13 | Switzerland | 2 - 1 | Algeria | **Switzerland** |
+| 14 | Argentina | 2 - 1 | Cabo Verde | **Argentina** |
+| 15 | Colombia | 2 - 1 | Ghana | **Colombia** |
+| 16 | Egypt | 1 - 2 | Australia | **Australia** |
+
+**Clasificados a octavos de final según el modelo:** Canada, Germany, Netherlands, Brazil, France, Norway, Ecuador, England, USA, Senegal, Portugal, Spain, Switzerland, Argentina, Colombia, Australia.
+
+Bracket visual generado por el modelo (imagen incluida en el repositorio, `data/dieciseisavos_prediccion.png`):
+
+![Predicción del bracket de dieciseisavos de final](data/dieciseisavos_prediccion.png)
+
 ## 📋 Requisitos previos
 
 - Python 3.9 o superior instalado.
