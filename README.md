@@ -18,6 +18,61 @@ Este repositorio contiene un sistema de predicción de resultados de la Copa Mun
     └── exportar_modelos.py            # Utilidad para exportar desde un notebook
 ```
 
+## 📊 Resultados predichos: Fase de grupos (Mundial 2026)
+
+Estas son las tablas de posiciones que arroja el modelo para los 12 grupos de la fase de grupos (formato de 48 selecciones), generadas con `scripts/generar_fase_grupos.py` (simulación determinista, sin números aleatorios: el mismo cruce de equipos siempre produce la misma tabla). En el formato real del Mundial 2026, avanzan a dieciseisavos los dos primeros de cada grupo más los 8 mejores terceros; esta tabla solo calcula la tabla de posiciones dentro de cada grupo, no ese desempate entre terceros. El bracket real de dieciseisavos de la sección siguiente ya incorpora el resultado final de esa clasificación y no se deriva automáticamente de esta simulación.
+
+| Grupo | Pos | Selección | Pts | DG | GF |
+|:-----:|:---:|-----------|:---:|:--:|:--:|
+| A | 1 | **Mexico** | 9 | +3 | 6 |
+| A | 2 | **South Africa** | 6 | +1 | 5 |
+| A | 3 | South Korea | 3 | -1 | 4 |
+| A | 4 | Czech Republic | 0 | -3 | 3 |
+| B | 1 | **Switzerland** | 9 | +3 | 6 |
+| B | 2 | **Canada** | 6 | +1 | 5 |
+| B | 3 | Bosnia and Herzegovina | 3 | -1 | 4 |
+| B | 4 | Qatar | 0 | -3 | 3 |
+| C | 1 | **Brazil** | 9 | +3 | 6 |
+| C | 2 | **Morocco** | 6 | +1 | 5 |
+| C | 3 | Scotland | 3 | -1 | 4 |
+| C | 4 | Haiti | 0 | -3 | 3 |
+| D | 1 | **Paraguay** | 9 | +3 | 6 |
+| D | 2 | **Australia** | 6 | +1 | 5 |
+| D | 3 | USA | 3 | -1 | 4 |
+| D | 4 | Turkey | 0 | -3 | 3 |
+| E | 1 | **Germany** | 9 | +3 | 6 |
+| E | 2 | **Ecuador** | 6 | +1 | 5 |
+| E | 3 | Côte d'Ivoire | 3 | -1 | 4 |
+| E | 4 | Curaçao | 0 | -3 | 3 |
+| F | 1 | **Netherlands** | 9 | +3 | 6 |
+| F | 2 | **Japan** | 6 | +1 | 5 |
+| F | 3 | Sweden | 3 | -1 | 4 |
+| F | 4 | Tunisia | 0 | -3 | 3 |
+| G | 1 | **Belgium** | 9 | +3 | 6 |
+| G | 2 | **Egypt** | 6 | +1 | 5 |
+| G | 3 | Iran | 3 | -1 | 4 |
+| G | 4 | New Zealand | 0 | -3 | 3 |
+| H | 1 | **Spain** | 9 | +3 | 6 |
+| H | 2 | **Uruguay** | 6 | +1 | 5 |
+| H | 3 | Saudi Arabia | 3 | -1 | 4 |
+| H | 4 | Cabo Verde | 0 | -3 | 3 |
+| I | 1 | **France** | 9 | +3 | 6 |
+| I | 2 | **Norway** | 6 | +1 | 5 |
+| I | 3 | Senegal | 3 | -1 | 4 |
+| I | 4 | Iraq | 0 | -3 | 3 |
+| J | 1 | **Argentina** | 9 | +3 | 6 |
+| J | 2 | **Austria** | 6 | +1 | 5 |
+| J | 3 | Algeria | 3 | -1 | 4 |
+| J | 4 | Jordan | 0 | -3 | 3 |
+| K | 1 | **Portugal** | 9 | +3 | 6 |
+| K | 2 | **Colombia** | 6 | +1 | 5 |
+| K | 3 | Uzbekistan | 3 | -1 | 4 |
+| K | 4 | Congo DR | 0 | -3 | 3 |
+| L | 1 | **England** | 9 | +3 | 6 |
+| L | 2 | **Croatia** | 6 | +1 | 5 |
+| L | 3 | Panama | 3 | -1 | 4 |
+| L | 4 | Ghana | 0 | -3 | 3 |
+
 ## 🏆 Resultados predichos: Dieciseisavos de final (Mundial 2026)
 
 Estos son los resultados que arroja el modelo para el cuadro real de dieciseisavos de final (32 clasificados reales de la fase de grupos), generados con `scripts/generar_dieciseisavos.py`. Se incluyen aquí directamente para poder revisarlos sin necesidad de clonar el repositorio ni ejecutar el código.
