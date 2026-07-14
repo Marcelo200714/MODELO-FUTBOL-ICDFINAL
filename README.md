@@ -43,10 +43,6 @@ Estos son los resultados que arroja el modelo para el cuadro real de dieciseisav
 
 **Clasificados a octavos de final según el modelo:** Canada, Germany, Netherlands, Brazil, France, Norway, Ecuador, England, USA, Senegal, Portugal, Spain, Switzerland, Argentina, Colombia, Australia.
 
-Bracket visual generado por el modelo (imagen incluida en el repositorio, `data/dieciseisavos_prediccion.png`):
-
-![Predicción del bracket de dieciseisavos de final](data/dieciseisavos_prediccion.png)
-
 ## 📋 Requisitos previos
 
 - Python 3.9 o superior instalado.
